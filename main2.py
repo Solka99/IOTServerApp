@@ -17,11 +17,28 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
 
+    variables = db.relationship('UserDefinedVariables', backref='user', lazy=True)
+
 class IoTDevice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     config = db.Column(db.String(200), nullable=True)  # Przechowywanie konfiguracji urządzenia
+
+class UserDefinedVariables(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    lower_temp_limit = db.Column(db.Float, nullable=True)
+    higher_temp_limit = db.Column(db.Float, nullable=True)
+
+    # Relacja do tabeli SendTimes
+    send_times = db.relationship('SendTimes', backref='variables', lazy=True)
+
+
+class SendTimes(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    variables_id = db.Column(db.Integer, db.ForeignKey('user_defined_variables.id'), nullable=False)
+    send_time = db.Column(db.Time, nullable=False)  # Przechowuje konkretną godzinę wysyłania
 
 # MQTT klient
 def on_connect(client, userdata, flags, rc):
@@ -77,6 +94,33 @@ def login():
         return jsonify({'message': f'Welcome, {user.username}!'}), 200
 
     return jsonify({'error': 'Invalid username or password!'}), 401
+@app.route('/set_parameters', methods=['POST'])
+def set_parameters():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    lower_temp_limit = data.get('lower_temp_limit')
+    higher_temp_limit = data.get('higher_temp_limit')
+    send_times = data.get('send_times')  # Lista godzin, np. ["08:00", "12:00", "18:00"]
+
+    # Znajdź lub utwórz zmienne użytkownika
+    user_variables = UserDefinedVariables.query.filter_by(user_id=user_id).first()
+    if not user_variables:
+        user_variables = UserDefinedVariables(user_id=user_id)
+
+    user_variables.lower_temp_limit = lower_temp_limit
+    user_variables.higher_temp_limit = higher_temp_limit
+
+    # Usuń istniejące godziny wysyłania i dodaj nowe
+    SendTimes.query.filter_by(variables_id=user_variables.id).delete()
+    for time in send_times:
+        send_time = SendTimes(variables_id=user_variables.id, send_time=time)
+        db.session.add(send_time)
+
+    db.session.add(user_variables)
+    db.session.commit()
+
+    return jsonify({'message': 'Parameters updated successfully!'}), 200
+
 
 if __name__ == '__main__':
     with app.app_context():
