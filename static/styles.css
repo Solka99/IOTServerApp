@@ -40,6 +40,23 @@ button:hover {
     background-color: #0056b3;
 }
 
+.button {
+    display: inline-block;
+    padding: 10px 20px;
+    margin-top: 3px;
+    font-size: 16px;
+    color: white;
+    text-decoration: none;
+    background-color: #007bff;
+    border-radius: 5px;
+    text-align: center;
+    transition: background-color 0.3s ease;
+}
+
+.button:hover {
+    background-color: #0056b3;
+}
+
 .button:active {
     background-color: #003d80;
 }
@@ -88,4 +105,36 @@ p {
     flex-direction: column;
     gap: 15px;
 }
+/* Nagłówki tabeli */
+table thead tr {
+    background-color: #007BFF;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+}
 
+/* Komórki tabeli */
+table th, table td {
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    text-align: center;
+}
+
+/* Kolory wierszy */
+table tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+table tbody tr:hover {
+    background-color: #f1f1f1;
+}
+.container_data {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    max-width: 800px;
+    width: 100%;
+    text-align: center;
+    overflow-x: auto; /* Wsparcie dla tabeli na mniejszych ekranach */
+}

@@ -3,7 +3,8 @@ from flask_sqlalchemy import SQLAlchemy
 import paho.mqtt.client as mqtt
 from datetime import datetime
 from flask import flash
-from models import db, User, IoTDevice, UserDefinedVariables, SendTimes
+import json
+from models import db, User, IoTDevice, UserDefinedVariables, SendTimes, SensorData
 
 app = Flask(__name__)
 app.secret_key = 'abc'
@@ -22,18 +23,41 @@ def on_connect(client, userdata, flags, rc):
     print("Connected to MQTT broker with result code ", rc)
     client.subscribe("#")
 
+# def on_message(client, userdata, msg):
+#     try:
+#         message = msg.payload.decode('utf-8')
+#     except UnicodeDecodeError:
+#         message = msg.payload
+#     # print(f"Received message: {message} on topic: {msg.topic}")
+
+
 def on_message(client, userdata, msg):
     try:
-        message = msg.payload.decode('utf-8')
-    except UnicodeDecodeError:
-        message = msg.payload
-    # print(f"Received message: {message} on topic: {msg.topic}")
+        payload = json.loads(msg.payload.decode('utf-8'))
+        device_id = payload.get('device_id')
+        temperature = payload.get('temperature')
+        pressure = payload.get('pressure')
 
-mqtt_client = mqtt.Client()
-mqtt_client.on_connect = on_connect
-mqtt_client.on_message = on_message
-mqtt_client.connect("mqtt.eclipseprojects.io", 1883, 60)
-mqtt_client.loop_start()
+        # Weryfikacja urządzenia
+        device = IoTDevice.query.filter_by(device_id=device_id).first()
+        if not device:
+            print(f"Invalid device ID: {device_id}")
+            return
+
+        # Zapis danych do bazy
+        new_data = SensorData(device_id=device_id, temperature=temperature, pressure=pressure)
+        db.session.add(new_data)
+        db.session.commit()
+        print(f"Data saved: {device_id}, Temp: {temperature}, Pressure: {pressure}")
+    except Exception as e:
+        print(f"Error processing message: {e}")
+
+
+# mqtt_client = mqtt.Client()
+# mqtt_client.on_connect = on_connect
+# mqtt_client.on_message = on_message
+# mqtt_client.connect("mqtt.eclipseprojects.io", 1883, 60)
+# mqtt_client.loop_start()
 
 @app.route('/')
 def home():
@@ -206,6 +230,40 @@ def dashboard():
 def logout():
     session.pop('user_id', None)  # Usuń użytkownika z sesji
     return redirect(url_for('home'))  # Przekierowanie na stronę logowania
+
+@app.route('/device_data', methods=['GET'])
+def device_data():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    user_id = session['user_id']
+    user_devices = IoTDevice.query.filter_by(owner_id=user_id).all()
+
+    if not user_devices:
+        return render_template('device_data.html', data=[], message="No devices registered.")
+
+    device_ids = [device.device_id for device in user_devices]
+    data = SensorData.query.filter(SensorData.device_id.in_(device_ids)).order_by(SensorData.timestamp.desc()).all()
+
+    return render_template('device_data.html', data=data, message=None)
+
+@app.route('/save_sensor_data', methods=['POST'])
+def save_sensor_data():
+    data = request.get_json()
+    device_id = data.get('device_id')
+    temperature = data.get('temperature')
+    pressure = data.get('pressure')
+
+    # Weryfikacja urządzenia
+    device = IoTDevice.query.filter_by(device_id=device_id).first()
+    if not device:
+        return jsonify({'error': 'Invalid device ID!'}), 400
+
+    # Zapis danych do bazy
+    new_data = SensorData(device_id=device_id, temperature=temperature, pressure=pressure)
+    db.session.add(new_data)
+    db.session.commit()
+    return jsonify({'message': 'Data saved successfully!'}), 201
 
 
 if __name__ == '__main__':

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Data</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container_data">
+        <h1>Device Data</h1>
+        {% if message %}
+            <p>{{ message }}</p>
+        {% else %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Device ID</th>
+                        <th>Temperature (°C)</th>
+                        <th>Pressure (hPa)</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in data %}
+                        <tr>
+                            <td>{{ record.device_id }}</td>
+                            <td>{{ record.temperature }}</td>
+                            <td>{{ record.pressure }}</td>
+                            <td>{{ record.timestamp }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+        <a href="/dashboard" class="button">Back to Dashboard</a>
+    </div>
+</body>
+</html>
