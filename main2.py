@@ -1,8 +1,10 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 import paho.mqtt.client as mqtt
+from datetime import datetime
 
 app = Flask(__name__)
+app.secret_key = 'abc'
 
 # Konfiguracja bazy danych
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///iot_app.db'
@@ -91,18 +93,34 @@ def login():
 
     user = User.query.filter_by(username=username, password=password).first()
     if user:
-        return jsonify({'message': f'Welcome, {user.username}!'}), 200
+        session['user_id'] = user.id  # Przechowujemy user_id w sesji
+        return jsonify({'redirect': url_for('set_parameters')}), 200
+        # return jsonify({'message': f'Welcome, {user.username}!'}), 200
 
     return jsonify({'error': 'Invalid username or password!'}), 401
-@app.route('/set_parameters', methods=['POST'])
+# Widok ustawiania parametrów
+@app.route('/set_parameters', methods=['GET'])
 def set_parameters():
+    if 'user_id' not in session:
+        return redirect(url_for('home'))  # Jeśli nie ma sesji, przekieruj na stronę główną
+    return render_template('set_parameters.html')
+
+# Endpoint do zapisu parametrów
+@app.route('/set_parameters', methods=['POST'])
+def save_parameters():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized access!'}), 403
+
     data = request.get_json()
-    user_id = data.get('user_id')
+    user_id = session['user_id']
     lower_temp_limit = data.get('lower_temp_limit')
     higher_temp_limit = data.get('higher_temp_limit')
-    send_times = data.get('send_times')  # Lista godzin, np. ["08:00", "12:00", "18:00"]
+    send_times = data.get('send_times')
 
-    # Znajdź lub utwórz zmienne użytkownika
+    # Walidacja danych wejściowych
+    if not send_times or not isinstance(send_times, list):
+        return jsonify({'error': 'Send times must be a non-empty list!'}), 400
+
     user_variables = UserDefinedVariables.query.filter_by(user_id=user_id).first()
     if not user_variables:
         user_variables = UserDefinedVariables(user_id=user_id)
@@ -110,18 +128,21 @@ def set_parameters():
     user_variables.lower_temp_limit = lower_temp_limit
     user_variables.higher_temp_limit = higher_temp_limit
 
-    # Usuń istniejące godziny wysyłania i dodaj nowe
+    # Usuń istniejące godziny i dodaj nowe
     SendTimes.query.filter_by(variables_id=user_variables.id).delete()
-    for time in send_times:
-        send_time = SendTimes(variables_id=user_variables.id, send_time=time)
-        db.session.add(send_time)
+    for time_str in send_times:
+        try:
+            # Konwersja stringa na obiekt time
+            time_obj = datetime.strptime(time_str, '%H:%M').time()
+            send_time = SendTimes(variables=user_variables, send_time=time_obj)
+            db.session.add(send_time)
+        except ValueError:
+            return jsonify({'error': f'Invalid time format: {time_str}. Use HH:MM format.'}), 400
 
     db.session.add(user_variables)
     db.session.commit()
 
     return jsonify({'message': 'Parameters updated successfully!'}), 200
-
-
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

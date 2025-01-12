@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set Parameters</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script>
+        async function setParameters() {
+            const lowerTempLimit = document.getElementById('lower-temp-limit').value;
+            const higherTempLimit = document.getElementById('higher-temp-limit').value;
+            const sendTimes = document.getElementById('send-times').value.split(',').map(time => time.trim());
+
+            const response = await fetch('/set_parameters', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    lower_temp_limit: parseFloat(lowerTempLimit),
+                    higher_temp_limit: parseFloat(higherTempLimit),
+                    send_times: sendTimes
+                })
+            });
+
+            const result = await response.json();
+            alert(result.message || result.error);
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Set Parameters</h1>
+        <div>
+            <label for="lower-temp-limit">Lower Temperature Limit:</label><br>
+            <input type="number" id="lower-temp-limit" placeholder="e.g., 15.0"><br>
+
+            <label for="higher-temp-limit">Higher Temperature Limit:</label><br>
+            <input type="number" id="higher-temp-limit" placeholder="e.g., 30.0"><br>
+
+            <label for="send-times">Send Times (comma-separated, e.g., 08:00, 12:00):</label><br>
+            <input type="text" id="send-times" placeholder="e.g., 08:00, 12:00, 18:00"><br>
+
+            <button onclick="setParameters()">Save Parameters</button>
+        </div>
+    </div>
+</body>
+</html>

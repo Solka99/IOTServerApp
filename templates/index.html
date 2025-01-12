@@ -35,7 +35,12 @@
             });
 
             const result = await response.json();
+             if (result.redirect) {
+            window.location.href = result.redirect;  // Przekierowanie do ustawiania parametrów
+        } else {
             alert(result.message || result.error);
+            }
+            // alert(result.message || result.error);
         }
     </script>
 </head>
