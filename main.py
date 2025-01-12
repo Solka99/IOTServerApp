@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, s
 from flask_sqlalchemy import SQLAlchemy
 import paho.mqtt.client as mqtt
 from datetime import datetime
+from flask import flash
 
 app = Flask(__name__)
 app.secret_key = 'abc'
@@ -150,6 +151,7 @@ def set_parameters():
                 db.session.add(SendTimes(variables=user_variables, send_time=time_obj))
 
         db.session.commit()
+        flash('Parameters set successfully!', 'success')
         return redirect(url_for('set_parameters'))
 
     # Przygotuj dane do wyświetlenia w formularzu
