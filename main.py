@@ -17,37 +17,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Inicjalizacja bazy danych
 db.init_app(app)
 
-# # Modele bazodanowe
-# class User(db.Model):
-#     id = db.Column(db.Integer, primary_key=True)
-#     username = db.Column(db.String(80), unique=True, nullable=False)
-#     password = db.Column(db.String(200), nullable=False)
-#
-#     variables = db.relationship('UserDefinedVariables', backref='user', lazy=True)
-#
-# class IoTDevice(db.Model):
-#     id = db.Column(db.Integer, primary_key=True)
-#     device_id = db.Column(db.String(100), unique=True, nullable=False)  # Unikalny identyfikator urządzenia
-#     name = db.Column(db.String(100), nullable=True)
-#     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-#     config = db.Column(db.JSON, nullable=True)  # Przechowywanie konfiguracji urządzenia
-#     registered_at = db.Column(db.DateTime, default=datetime.now)  # Data rejestracji urządzenia
-#
-#
-# class UserDefinedVariables(db.Model):
-#     user_id = db.Column(db.Integer, db.ForeignKey('user.id'),  primary_key=True, nullable=True)
-#     lower_temp_limit = db.Column(db.Integer, nullable=True)
-#     higher_temp_limit = db.Column(db.Integer, nullable=True)
-#
-#     # Relacja do tabeli SendTimes
-#     send_times = db.relationship('SendTimes', backref='variables', lazy=True)
-#
-#
-# class SendTimes(db.Model):
-#     id = db.Column(db.Integer, primary_key=True)
-#     variables_id = db.Column(db.Integer, db.ForeignKey('user_defined_variables.user_id'), nullable=False)
-#     send_time = db.Column(db.Time, nullable=False)  # Przechowuje konkretną godzinę wysyłania
-
 # MQTT klient
 def on_connect(client, userdata, flags, rc):
     print("Connected to MQTT broker with result code ", rc)
@@ -100,7 +69,7 @@ def login():
     user = User.query.filter_by(username=username, password=password).first()
     if user:
         session['user_id'] = user.id  # Przechowujemy user_id w sesji
-        return jsonify({'redirect': url_for('set_parameters')}), 200
+        return jsonify({'redirect': url_for('dashboard')}), 200
         # return jsonify({'message': f'Welcome, {user.username}!'}), 200
 
     return jsonify({'error': 'Invalid username or password!'}), 401
@@ -175,6 +144,69 @@ def set_parameters():
         higher_temp_limit=higher_temp_limit,
         send_times=send_times
     )
+
+@app.route('/register_device', methods=['POST'])
+def register_device():
+    print('in')
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized access!'}), 403
+
+    user_id = session['user_id']
+    data = request.get_json()
+    device_id = data.get('device_id')
+    device_name = data.get('device_name')
+
+    if not device_id or not device_name:
+        return jsonify({'error': 'Device ID and name are required!'}), 400
+
+    # Sprawdź, czy urządzenie już istnieje w bazie
+    device = IoTDevice.query.filter_by(device_id=device_id).first()
+
+    if device:
+        # Jeśli urządzenie ma już właściciela
+        if device.owner_id == user_id:
+            return jsonify({'message': 'Device is already registered to your account!'}), 200
+        else:
+            # Przypisz urządzenie do nowego właściciela
+            previous_owner = User.query.get(device.owner_id)
+            device.owner_id = user_id
+            device.name = device_name
+            device.registered_at = datetime.utcnow()
+            db.session.commit()
+            return jsonify({
+                'message': f'Device {device.device_id} is now registered to your account. '
+                           f'Previous owner ({previous_owner.username}) has lost access.'
+            }), 200
+    else:
+        # Utwórz nowe urządzenie i przypisz je do użytkownika
+        new_device = IoTDevice(
+            device_id=device_id,
+            name=device_name,
+            owner_id=user_id,
+            registered_at=datetime.utcnow()
+        )
+        db.session.add(new_device)
+        db.session.commit()
+        return jsonify({'message': f'Device {device_id} has been registered successfully!'}), 201
+
+@app.route('/register_device_form', methods=['GET'])
+def register_device_form():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('register_device.html')
+
+@app.route('/dashboard', methods=['GET'])
+def dashboard():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))  # Przekierowanie do logowania, jeśli użytkownik nie jest zalogowany
+
+    return render_template('dashboard.html')
+
+@app.route('/logout', methods=['GET','POST'])
+def logout():
+    session.pop('user_id', None)  # Usuń użytkownika z sesji
+    return redirect(url_for('home'))  # Przekierowanie na stronę logowania
+
 
 if __name__ == '__main__':
     with app.app_context():

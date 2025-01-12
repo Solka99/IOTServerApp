@@ -40,6 +40,9 @@ button:hover {
     background-color: #0056b3;
 }
 
+.button:active {
+    background-color: #003d80;
+}
 .flash-container {
     position: fixed; /* Utrzymuje element na stałej pozycji na górze strony */
     top: 0;
@@ -75,4 +78,14 @@ button:hover {
     border: 1px solid #f5c6cb;
 }
 
+p {
+    font-size: 16px;
+    margin-bottom: 20px;
+}
+
+.menu {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
 

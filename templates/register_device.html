@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register Device</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Register Device</h1>
+        <form id="register-device-form">
+            <label for="device-id">Device ID:</label><br>
+            <input type="text" id="device-id" placeholder="Enter Device ID" required><br>
+            <label for="device-name">Device Name:</label><br>
+            <input type="text" id="device-name" placeholder="Enter Device Name" required><br>
+            <button type="button" onclick="registerDevice()">Register</button>
+        </form>
+        <div id="message" style="margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        async function registerDevice() {
+            const deviceId = document.getElementById('device-id').value;
+            const deviceName = document.getElementById('device-name').value;
+
+            const response = await fetch('/register_device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ device_id: deviceId, device_name: deviceName })
+            });
+
+            const result = await response.json();
+            const messageDiv = document.getElementById('message');
+            if (result.error) {
+                messageDiv.innerHTML = `<span style="color: red;">${result.error}</span>`;
+            } else {
+                messageDiv.innerHTML = `<span style="color: green;">${result.message}</span>`;
+            }
+        }
+    </script>
+</body>
+</html>
