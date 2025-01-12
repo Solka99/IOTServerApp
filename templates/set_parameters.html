@@ -6,43 +6,42 @@
     <title>Set Parameters</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script>
-        async function setParameters() {
-            const lowerTempLimit = document.getElementById('lower-temp-limit').value;
-            const higherTempLimit = document.getElementById('higher-temp-limit').value;
-            const sendTimes = document.getElementById('send-times').value.split(',').map(time => time.trim());
+        function validateTimes() {
+            const timesInput = document.getElementById('send-times').value;
+            const times = timesInput.split(',').map(time => time.trim());
+            const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/; // Walidacja HH:MM (24h format)
 
-            const response = await fetch('/set_parameters', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    lower_temp_limit: parseFloat(lowerTempLimit),
-                    higher_temp_limit: parseFloat(higherTempLimit),
-                    send_times: sendTimes
-                })
-            });
-
-            const result = await response.json();
-            alert(result.message || result.error);
+            for (const time of times) {
+                if (!timeRegex.test(time)) {
+                    alert(`Invalid time format: '${time}'. Please use HH:MM format.`);
+                    return false;
+                }
+            }
+            return true;
         }
     </script>
 </head>
 <body>
     <div class="container">
         <h1>Set Parameters</h1>
-        <div>
-            <label for="lower-temp-limit">Lower Temperature Limit:</label><br>
-            <input type="number" id="lower-temp-limit" placeholder="e.g., 15.0"><br>
-
-            <label for="higher-temp-limit">Higher Temperature Limit:</label><br>
-            <input type="number" id="higher-temp-limit" placeholder="e.g., 30.0"><br>
-
-            <label for="send-times">Send Times (comma-separated, e.g., 08:00, 12:00):</label><br>
-            <input type="text" id="send-times" placeholder="e.g., 08:00, 12:00, 18:00"><br>
-
-            <button onclick="setParameters()">Save Parameters</button>
-        </div>
+        {% if error %}
+            <div style="color: red; margin-bottom: 10px;">{{ error }}</div>
+        {% endif %}
+        <form method="POST" action="/set_parameters" onsubmit="return validateTimes();">
+            <div>
+                <label for="lower-temp-limit">Lower Temperature Limit:</label><br>
+                <input type="number" id="lower-temp-limit" name="lower_temp_limit" placeholder="e.g., 15" value="{{ lower_temp_limit }}"><br>
+            </div>
+            <div>
+                <label for="higher-temp-limit">Higher Temperature Limit:</label><br>
+                <input type="number" id="higher-temp-limit" name="higher_temp_limit" placeholder="e.g., 30" value="{{ higher_temp_limit }}"><br>
+            </div>
+            <div>
+                <label for="send-times">Send Times (comma-separated, e.g., 08:00, 12:00):</label><br>
+                <input type="text" id="send-times" name="send_times" placeholder="e.g., 08:00, 12:00, 18:00" value="{{ send_times }}"><br>
+            </div>
+            <button type="submit">Update All</button>
+        </form>
     </div>
 </body>
 </html>
