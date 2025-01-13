@@ -5,6 +5,12 @@ from datetime import datetime
 from flask import flash
 import json
 from models import db, User, IoTDevice, UserDefinedVariables, SendTimes, SensorData
+import os
+
+
+# Dane do wysłania
+# mosquitto_pub -h 127.0.0.1 -p 1883 -t "user1/device1/temperature" -m '{\"value\": 25.5}'
+
 
 app = Flask(__name__)
 app.secret_key = 'abc'
@@ -18,39 +24,112 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Inicjalizacja bazy danych
 db.init_app(app)
 
-# MQTT klient
-def on_connect(client, userdata, flags, rc):
-    print("Connected to MQTT broker with result code ", rc)
-    client.subscribe("#")
 
-# def on_message(client, userdata, msg):
+# MQTT konfiguracja
+BROKER_URL = "127.0.0.1"
+BROKER_PORT = 1883
+
+USERNAME = "user1"
+PASSWORD = "user1"
+
+TOPICS = [
+    "user1/+/temperature"
+]
+# Modele bazy danych
+class SensorData2(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    topic = db.Column(db.String(255), nullable=False)
+    value = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.now)
+
+# # Funkcja zapisu danych do bazy danych
+# def save_data_to_db(topic, value):
 #     try:
-#         message = msg.payload.decode('utf-8')
-#     except UnicodeDecodeError:
-#         message = msg.payload
-#     # print(f"Received message: {message} on topic: {msg.topic}")
+#         timestamp = datetime.utcnow()
+#         new_data = SensorData2(topic=topic, value=value, timestamp=timestamp)
+#         db.session.add(new_data)
+#         db.session.commit()
+#         print(f"Saved to DB: {topic} -> {value} at {timestamp}")
+#     except Exception as e:
+#         print(f"Error saving to database: {e}")
+
+def save_data_to_db(topic, value):
+    with app.app_context():  # Wymuszenie kontekstu aplikacji
+        try:
+            timestamp = datetime.now()
+            # Konwersja wartości na ciąg znaków JSON
+            value_str = json.dumps(value)  # Zamienia słownik na JSON w formie tekstu
+            new_data = SensorData2(topic=topic, value=value_str, timestamp=timestamp)
+            db.session.add(new_data)
+            db.session.commit()
+            print(f"Saved to DB: {topic} -> {value_str} at {timestamp}")
+        except Exception as e:
+            print(f"Error saving to database: {e}")
 
 
+
+
+# Callback: Po połączeniu z brokerem
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("Connected to MQTT Broker!")
+        for topic in TOPICS:
+            client.subscribe(topic)
+            print(f"Subscribed to topic: {topic}")
+    else:
+        print(f"Failed to connect, return code {rc}")
+
+# Callback: Po odebraniu wiadomości
 def on_message(client, userdata, msg):
     try:
-        payload = json.loads(msg.payload.decode('utf-8'))
-        device_id = payload.get('device_id')
-        temperature = payload.get('temperature')
-        pressure = payload.get('pressure')
-
-        # Weryfikacja urządzenia
-        device = IoTDevice.query.filter_by(device_id=device_id).first()
-        if not device:
-            print(f"Invalid device ID: {device_id}")
-            return
-
-        # Zapis danych do bazy
-        new_data = SensorData(device_id=device_id, temperature=temperature, pressure=pressure)
-        db.session.add(new_data)
-        db.session.commit()
-        print(f"Data saved: {device_id}, Temp: {temperature}, Pressure: {pressure}")
+        value = json.loads(msg.payload.decode("utf-8"))
+        print(f"Received: {value} on topic: {msg.topic}")
+        save_data_to_db(msg.topic, value)
     except Exception as e:
         print(f"Error processing message: {e}")
+
+# Konfiguracja klienta MQTT
+def setup_mqtt():
+    client = mqtt.Client()
+    client.username_pw_set(USERNAME, PASSWORD)
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.connect(BROKER_URL, BROKER_PORT, 60)
+    client.loop_start()  # Uruchom klienta MQTT w osobnym wątku
+
+# # MQTT klient
+# def on_connect(client, userdata, flags, rc):
+#     print("Connected to MQTT broker with result code ", rc)
+#     client.subscribe("#")
+#
+# # def on_message(client, userdata, msg):
+# #     try:
+# #         message = msg.payload.decode('utf-8')
+# #     except UnicodeDecodeError:
+# #         message = msg.payload
+# #     # print(f"Received message: {message} on topic: {msg.topic}")
+#
+#
+# def on_message(client, userdata, msg):
+#     try:
+#         payload = json.loads(msg.payload.decode('utf-8'))
+#         device_id = payload.get('device_id')
+#         temperature = payload.get('temperature')
+#         pressure = payload.get('pressure')
+#
+#         # Weryfikacja urządzenia
+#         device = IoTDevice.query.filter_by(device_id=device_id).first()
+#         if not device:
+#             print(f"Invalid device ID: {device_id}")
+#             return
+#
+#         # Zapis danych do bazy
+#         new_data = SensorData(device_id=device_id, temperature=temperature, pressure=pressure)
+#         db.session.add(new_data)
+#         db.session.commit()
+#         print(f"Data saved: {device_id}, Temp: {temperature}, Pressure: {pressure}")
+#     except Exception as e:
+#         print(f"Error processing message: {e}")
 
 
 # mqtt_client = mqtt.Client()
@@ -269,4 +348,5 @@ def save_sensor_data():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+        setup_mqtt()  # Konfiguracja MQTT
     app.run(debug=True)
