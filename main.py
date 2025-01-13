@@ -344,6 +344,40 @@ def save_sensor_data():
     db.session.commit()
     return jsonify({'message': 'Data saved successfully!'}), 201
 
+@app.route('/publish_to_device', methods=['POST'])
+def publish_to_device():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized access!'}), 403
+
+    user_id = session['user_id']
+
+    # Pobierz dane użytkownika z bazy danych
+    user_variables = UserDefinedVariables.query.filter_by(user_id=user_id).first()
+    if not user_variables:
+        return jsonify({'error': 'No parameters set for this user!'}), 404
+
+    # Utwórz payload z danymi
+    payload = {
+        "lower_temp_limit": user_variables.lower_temp_limit,
+        "higher_temp_limit": user_variables.higher_temp_limit,
+        "send_times": [time.send_time.strftime('%H:%M') for time in user_variables.send_times]
+    }
+
+    try:
+        # Konfiguracja klienta MQTT
+        client = mqtt.Client()
+        client.username_pw_set(USERNAME, PASSWORD)
+        client.connect(BROKER_URL, BROKER_PORT, 60)
+
+        # Publikacja danych
+        topic = f"user{user_id}/device/config"
+        client.publish(topic, json.dumps(payload))
+        client.disconnect()
+
+        return jsonify({'message': 'Configuration published to device!'}), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to publish data: {str(e)}'}), 500
+
 
 if __name__ == '__main__':
     with app.app_context():
