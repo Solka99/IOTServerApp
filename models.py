@@ -13,7 +13,7 @@ class User(db.Model):
 
 class IoTDevice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    device_id = db.Column(db.String(100), unique=True, nullable=False)  # Unikalny identyfikator urządzenia
+    device_id = db.Column(db.String(100), unique=False, nullable=False)  # Unikalny identyfikator urządzenia
     name = db.Column(db.String(100), nullable=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     config = db.Column(db.JSON, nullable=True)  # Przechowywanie konfiguracji urządzenia  <-- do dodania jak ogarniemy co ma być w configu

@@ -25,16 +25,23 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
 
+mac_global=''
 # MQTT konfiguracja
-BROKER_URL = "127.0.0.1"
+BROKER_URL = "192.168.5.242"
 BROKER_PORT = 1883
 
 USERNAME = "user1"
 PASSWORD = "user1"
 
 TOPICS = [
-    "user1/+/temperature"
+    "user1/+/temperature",
+    # "user1/+/humidity",
+    "+/+/temperature"
 ]
+
+# 'username'/'adres::mac'/'
+user_name=''
+
 # Modele bazy danych
 class SensorData2(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -88,6 +95,7 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"Error processing message: {e}")
 
+
 # Konfiguracja klienta MQTT
 def setup_mqtt():
     client = mqtt.Client()
@@ -97,51 +105,21 @@ def setup_mqtt():
     client.connect(BROKER_URL, BROKER_PORT, 60)
     client.loop_start()  # Uruchom klienta MQTT w osobnym wątku
 
-# # MQTT klient
-# def on_connect(client, userdata, flags, rc):
-#     print("Connected to MQTT broker with result code ", rc)
-#     client.subscribe("#")
-#
-# # def on_message(client, userdata, msg):
-# #     try:
-# #         message = msg.payload.decode('utf-8')
-# #     except UnicodeDecodeError:
-# #         message = msg.payload
-# #     # print(f"Received message: {message} on topic: {msg.topic}")
-#
-#
-# def on_message(client, userdata, msg):
-#     try:
-#         payload = json.loads(msg.payload.decode('utf-8'))
-#         device_id = payload.get('device_id')
-#         temperature = payload.get('temperature')
-#         pressure = payload.get('pressure')
-#
-#         # Weryfikacja urządzenia
-#         device = IoTDevice.query.filter_by(device_id=device_id).first()
-#         if not device:
-#             print(f"Invalid device ID: {device_id}")
-#             return
-#
-#         # Zapis danych do bazy
-#         new_data = SensorData(device_id=device_id, temperature=temperature, pressure=pressure)
-#         db.session.add(new_data)
-#         db.session.commit()
-#         print(f"Data saved: {device_id}, Temp: {temperature}, Pressure: {pressure}")
-#     except Exception as e:
-#         print(f"Error processing message: {e}")
 
+def read_username_from_db():
+    user_id = session['user_id']
+    global user_name
+    user_name = User.query.get(user_id).username
 
-# mqtt_client = mqtt.Client()
-# mqtt_client.on_connect = on_connect
-# mqtt_client.on_message = on_message
-# mqtt_client.connect("mqtt.eclipseprojects.io", 1883, 60)
-# mqtt_client.loop_start()
+@app.route('/', defaults={'mac_address': None}, methods=['GET'])
+@app.route('/<mac_address>', methods=['GET'])
+def home(mac_address):
+    global mac_global
+    mac_global=mac_address
+    return render_template('index.html',mac_address=mac_address)
 
-@app.route('/')
-def home():
-    return render_template('index.html')
-
+# @app.route('/register', defaults={'mac_address': None}, methods=['POST'])
+# @app.route('/register/<mac_address>', methods=['POST'])
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -160,8 +138,11 @@ def register():
 
     return jsonify({'message': 'User registered successfully!'}), 201
 
+# @app.route('/login', defaults={'mac_address': None}, methods=['POST'])
+# @app.route('/login/<mac_address>', methods=['POST'])
 @app.route('/login', methods=['POST'])
 def login():
+    mac_address=mac_global
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
@@ -170,12 +151,34 @@ def login():
         return jsonify({'error': 'Username and password are required!'}), 400
 
     user = User.query.filter_by(username=username, password=password).first()
-    if user:
-        session['user_id'] = user.id  # Przechowujemy user_id w sesji
-        return jsonify({'redirect': url_for('dashboard')}), 200
-        # return jsonify({'message': f'Welcome, {user.username}!'}), 200
+    if not user:
+        return jsonify({'error': 'Invalid username or password!'}), 401
 
-    return jsonify({'error': 'Invalid username or password!'}), 401
+    session['user_id'] = user.id
+
+    # Rejestracja nowego urządzenia, jeśli podano mac_address
+    if mac_address:
+        existing_device = IoTDevice.query.filter_by(device_id=mac_address).first()
+        if existing_device:
+            return jsonify({'error': f'Device {mac_address} is already registered!'}), 400
+
+        new_device = IoTDevice(
+            device_id=mac_address,
+            name='new',
+            owner_id=user.id,
+            registered_at=datetime.now()
+        )
+        db.session.add(new_device)
+        db.session.commit()
+        # # flash(f'Device {mac_address} has been registered successfully!', 'success')\
+        # session['message'] = f'Device {mac_address} has been registered successfully!'
+        flash(f'Device {mac_address} has been registered successfully!', 'success')
+        return redirect(url_for('dashboard'))
+        # return jsonify({'redirect': url_for('dashboard')}), 200
+
+    return jsonify({'redirect': url_for('dashboard')}), 200
+    # return jsonify({'message': f'Welcome, {user.username}!'}), 200
+
 
 
 @app.route('/set_parameters', methods=['GET', 'POST'])
@@ -250,7 +253,8 @@ def set_parameters():
 
 @app.route('/register_device', methods=['POST'])
 def register_device():
-    print('in')
+    read_username_from_db()
+
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized access!'}), 403
 
@@ -274,10 +278,10 @@ def register_device():
             previous_owner = User.query.get(device.owner_id)
             device.owner_id = user_id
             device.name = device_name
-            device.registered_at = datetime.utcnow()
+            device.registered_at = datetime.now()
             db.session.commit()
             return jsonify({
-                'message': f'Device {device.device_id} is now registered to your account. '
+                'message': f'Device {device.device_name} is now registered to your account. '
                            f'Previous owner ({previous_owner.username}) has lost access.'
             }), 200
     else:
@@ -383,4 +387,5 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         setup_mqtt()  # Konfiguracja MQTT
+        # publish_to_device()
     app.run(debug=True)

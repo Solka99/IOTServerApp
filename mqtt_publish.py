@@ -1,12 +1,19 @@
+from time import sleep
+from main import user_name
 import paho.mqtt.client as mqtt
 import json
 
+#to działa do publikowania
+
+
 # Konfiguracja MQTT
-BROKER_URL = "127.0.0.1"
+BROKER_URL = "192.168.5.242"   # adres ip komputera Gabi połączonego z wifi
 BROKER_PORT = 1883
-USERNAME = "user1"
+USERNAME = "aaa"
+# USERNAME = user_name
 PASSWORD = "user1"
-TOPIC = "user1/device1/config"  # Temat, na którym płytka subskrybuje
+# TOPIC = "user1/device1/config"  # Temat, na którym płytka subskrybuje
+TOPIC = "username"
 
 # Konfiguracja klienta MQTT
 def publish_to_device(data):
@@ -16,7 +23,8 @@ def publish_to_device(data):
 
     try:
         # Publikuj dane w formacie JSON
-        payload = json.dumps(data)
+        payload = data
+        # payload = json.dumps(data)
         client.publish(TOPIC, payload)
         print(f"Published to {TOPIC}: {payload}")
     except Exception as e:
@@ -33,5 +41,12 @@ if __name__ == "__main__":
             "max": 30
         }
     }
+    config_data2={
+        "username": USERNAME
+    }
 
-    publish_to_device(config_data)
+    while True:
+        if USERNAME != '':
+            # publish_to_device(config_data2)
+            publish_to_device(USERNAME)
+            sleep(5)

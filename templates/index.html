@@ -23,25 +23,38 @@
         }
 
         async function loginUser() {
-            const username = document.getElementById('login-username').value;
-            const password = document.getElementById('login-password').value;
+    const username = document.getElementById('login-username').value;
+    const password = document.getElementById('login-password').value;
 
-            const response = await fetch('/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ username, password })
-            });
 
-            const result = await response.json();
-             if (result.redirect) {
-            window.location.href = result.redirect;  // Przekierowanie do ustawiania parametrów
-        } else {
-            alert(result.message || result.error);
+
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            if (data.redirect) {
+                // Przekierowanie użytkownika na dashboard
+                window.location.href = data.redirect;
+            } else {
+                alert(data.message || 'Login successful');
             }
-            // alert(result.message || result.error);
+        } else {
+            // Wyświetlanie błędu
+            alert(data.error || 'An error occurred');
         }
+    } catch (error) {
+        // console.error('Error during login:', error);
+        // alert('Something went wrong. Please try again.');
+    }
+}
     </script>
 </head>
 <body>
