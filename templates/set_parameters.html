@@ -31,15 +31,52 @@
                 <input type="number" id="higher-temp-limit" name="higher_temp_limit" placeholder="e.g., 30" value="{{ higher_temp_limit }}"><br>
             </div>
             <div>
-                <label for="send-times">Send Times (comma-separated, e.g., 08:00, 12:00):</label><br>
-                <input type="text" id="send-times" name="send_times" placeholder="e.g., 08:00, 12:00, 18:00" value="{{ send_times }}"><br>
+<!--                <label for="send-times">Send Times (comma-separated, e.g., 08:00, 12:00):</label><br>-->
+<!--                <input type="text" id="send-times" name="send_times" placeholder="e.g., 08:00, 12:00, 18:00" value="{{ send_times }}"><br>-->
+                 <label for="frequency">Frequency:</label><br>
+                <input type="number" id="frequency" name="frequency" placeholder="Zakres 1- 24" value="{{ frequency }}"><br>
             </div>
-            <button type="submit">Update All</button>
+            <button type="submit" onclick="updateParameters()">Update All</button>
         </form>
     </div>
 
     <!-- JavaScript do automatycznego ukrywania flash -->
     <script>
+        async function updateParameters() {
+        // Pobieranie wartości z pól formularza
+        const lowerTempLimit = document.getElementById('lower-temp-limit').value;
+        const higherTempLimit = document.getElementById('higher-temp-limit').value;
+        const frequency = document.getElementById('frequency').value;
+
+        // Tworzenie obiektu danych do wysłania
+        const parameters = {
+            lower_temp_limit: parseInt(lowerTempLimit, 10),  // Konwersja na liczbę całkowitą
+            higher_temp_limit: parseInt(higherTempLimit, 10),  // Konwersja na liczbę całkowitą
+            frequency: parseInt(frequency, 10)  // Konwersja na liczbę całkowitą
+        };
+
+        try {
+            // Wysyłanie danych do serwera za pomocą POST
+            const response = await fetch('/mqtt_send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(parameters)
+            });
+
+            // Obsługa odpowiedzi serwera
+            if (response.ok) {
+                const result = await response.json();
+                alert('Parameters successfully updated and sent via MQTT!');
+            } else {
+                alert('Failed to send parameters. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('An error occurred. Please check your connection and try again.');
+        }
+    }
         setTimeout(() => {
             const flashMessages = document.querySelectorAll('.alert');
             flashMessages.forEach(message => {

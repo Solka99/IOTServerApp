@@ -6,10 +6,12 @@ from flask import flash
 import json
 from models import db, User, IoTDevice, UserDefinedVariables, SendTimes, SensorData
 import os
+from mqtt_publish import *
 
 
 # Dane do wysłania
 # mosquitto_pub -h 127.0.0.1 -p 1883 -t "user1/device1/temperature" -m '{\"value\": 25.5}'
+
 
 
 app = Flask(__name__)
@@ -19,8 +21,6 @@ app.secret_key = 'abc'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///iot_app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# # Inicjalizacja bazy danych
-# db = SQLAlchemy(app)
 # Inicjalizacja bazy danych
 db.init_app(app)
 
@@ -36,7 +36,8 @@ PASSWORD = "user1"
 TOPICS = [
     "user1/+/temperature",
     # "user1/+/humidity",
-    "+/+/temperature"
+    "+/+/temperature",
+    "+/+/readings"
 ]
 
 # 'username'/'adres::mac'/'
@@ -49,30 +50,39 @@ class SensorData2(db.Model):
     value = db.Column(db.String(255), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.now)
 
-# # Funkcja zapisu danych do bazy danych
-# def save_data_to_db(topic, value):
-#     try:
-#         timestamp = datetime.utcnow()
-#         new_data = SensorData2(topic=topic, value=value, timestamp=timestamp)
-#         db.session.add(new_data)
-#         db.session.commit()
-#         print(f"Saved to DB: {topic} -> {value} at {timestamp}")
-#     except Exception as e:
-#         print(f"Error saving to database: {e}")
-
 def save_data_to_db(topic, value):
     with app.app_context():  # Wymuszenie kontekstu aplikacji
         try:
             timestamp = datetime.now()
             # Konwersja wartości na ciąg znaków JSON
+            print(value)
             value_str = json.dumps(value)  # Zamienia słownik na JSON w formie tekstu
-            new_data = SensorData2(topic=topic, value=value_str, timestamp=timestamp)
-            db.session.add(new_data)
+            topic_parts = topic.split('/')
+            topic_parts.pop()
+            new_data_good = SensorData(device_id= topic_parts[1], temperature=value['temperature'], pressure=value['pressure'],timestamp=timestamp )
+            # new_data = SensorData2(topic=topic, value=value_str, timestamp=timestamp)
+            # db.session.add(new_data)
+            # db.session.commit()
+            db.session.add(new_data_good)
             db.session.commit()
             print(f"Saved to DB: {topic} -> {value_str} at {timestamp}")
         except Exception as e:
             print(f"Error saving to database: {e}")
 
+
+# def send_to_beacon():
+#     # read_send_times_from_db_and_transform_to_string()
+#     a = read_send_times_from_db_and_transform_to_string()
+#
+#     data = {
+#         "send_times": a
+#     }
+#     # Konwersja datetime.time na czytelny format, np. HH:MM
+#     data_serializable = {
+#         'send_times': [t.strftime('%H:%M') for t in data['send_times']]
+#     }
+#     payload = json.dumps(data_serializable)
+#     publish_to_device(payload)
 
 
 
@@ -111,11 +121,24 @@ def read_username_from_db():
     global user_name
     user_name = User.query.get(user_id).username
 
+
 @app.route('/', defaults={'mac_address': None}, methods=['GET'])
 @app.route('/<mac_address>', methods=['GET'])
 def home(mac_address):
     global mac_global
     mac_global=mac_address
+    # # read_send_times_from_db_and_transform_to_string()
+    # a = read_send_times_from_db_and_transform_to_string()
+    #
+    # data = {
+    #     "send_times": a
+    # }
+    # # Konwersja datetime.time na czytelny format, np. HH:MM
+    # data_serializable = {
+    #     'send_times': [t.strftime('%H:%M') for t in data['send_times']]
+    # }
+    # payload = json.dumps(data_serializable)
+    # publish_to_device(payload)
     return render_template('index.html',mac_address=mac_address)
 
 # @app.route('/register', defaults={'mac_address': None}, methods=['POST'])
@@ -194,26 +217,36 @@ def set_parameters():
         # Pobierz dane z formularza
         lower_temp_limit = request.form.get('lower_temp_limit')
         higher_temp_limit = request.form.get('higher_temp_limit')
-        send_times = request.form.get('send_times')
+        frequency = request.form.get('frequency')
 
-        # Walidacja godzin (send_times)
-        valid_times = []
-        if send_times:
-            for time_str in send_times.split(','):
-                time_str = time_str.strip()
-                try:
-                    # Konwersja na obiekt czasu
-                    time_obj = datetime.strptime(time_str, '%H:%M').time()
-                    valid_times.append(time_obj)
-                except ValueError:
-                    # Jeśli format jest nieprawidłowy
-                    return render_template(
-                        'set_parameters.html',
-                        lower_temp_limit=lower_temp_limit,
-                        higher_temp_limit=higher_temp_limit,
-                        send_times=send_times,
-                        error=f"Invalid time format: '{time_str}'. Use HH:MM format."
-                    )
+        if int(frequency) < 1 or int(frequency) > 24:
+            return render_template(
+                            'set_parameters.html',
+                            lower_temp_limit=lower_temp_limit,
+                            higher_temp_limit=higher_temp_limit,
+                            frequency=frequency,
+                            error=f"Invalid value: '{frequency}'.It should be between 1 and 24."
+                        )
+        # send_times = request.form.get('send_times')
+
+        # # Walidacja godzin (send_times)
+        # valid_times = []
+        # if send_times:
+        #     for time_str in send_times.split(','):
+        #         time_str = time_str.strip()
+        #         try:
+        #             # Konwersja na obiekt czasu
+        #             time_obj = datetime.strptime(time_str, '%H:%M').time()
+        #             valid_times.append(time_obj)
+        #         except ValueError:
+        #             # Jeśli format jest nieprawidłowy
+        #             return render_template(
+        #                 'set_parameters.html',
+        #                 lower_temp_limit=lower_temp_limit,
+        #                 higher_temp_limit=higher_temp_limit,
+        #                 send_times=send_times,
+        #                 error=f"Invalid time format: '{time_str}'. Use HH:MM format."
+        #             )
 
         # Jeśli brak zmiennych użytkownika, utwórz je
         if not user_variables:
@@ -223,13 +256,14 @@ def set_parameters():
         # Zapisz nowe wartości
         user_variables.lower_temp_limit = int(lower_temp_limit) if lower_temp_limit else None
         user_variables.higher_temp_limit = int(higher_temp_limit) if higher_temp_limit else None
+        user_variables.frequency = int(frequency) if frequency else None
 
-        # Aktualizuj godziny wysyłania
-        SendTimes.query.filter_by(variables_id=user_variables.user_id).delete()  # Usuń poprzednie godziny
-        if send_times:
-            for time_str in send_times.split(','):
-                time_obj = datetime.strptime(time_str.strip(), '%H:%M').time()
-                db.session.add(SendTimes(variables=user_variables, send_time=time_obj))
+        # # Aktualizuj godziny wysyłania
+        # SendTimes.query.filter_by(variables_id=user_variables.user_id).delete()  # Usuń poprzednie godziny
+        # if send_times:
+        #     for time_str in send_times.split(','):
+        #         time_obj = datetime.strptime(time_str.strip(), '%H:%M').time()
+        #         db.session.add(SendTimes(variables=user_variables, send_time=time_obj))
 
         db.session.commit()
         flash('Parameters set successfully!', 'success')
@@ -238,19 +272,30 @@ def set_parameters():
     # Przygotuj dane do wyświetlenia w formularzu
     lower_temp_limit = user_variables.lower_temp_limit if user_variables else ''
     higher_temp_limit = user_variables.higher_temp_limit if user_variables else ''
-    send_times = (
-        ', '.join([time.send_time.strftime('%H:%M') for time in user_variables.send_times])
-        if user_variables and user_variables.send_times
-        else ''
-    )
+    frequency = user_variables.frequency if user_variables else ''
+    # send_times = (
+    #     ', '.join([time.send_time.strftime('%H:%M') for time in user_variables.send_times])
+    #     if user_variables and user_variables.send_times
+    #     else ''
+    # )
 
     return render_template(
         'set_parameters.html',
         lower_temp_limit=lower_temp_limit,
         higher_temp_limit=higher_temp_limit,
-        send_times=send_times
+        # send_times=send_times
+        frequency=frequency,
     )
 
+@app.route('/mqtt_send', methods=['POST'])
+def mqtt_send():
+    publish_to_device(read_frequency_from_db(), 'sending_times')
+    publish_to_device_2(read_changed_limits_from_db(), 'limits')
+
+    return jsonify({'message': f'Updated parameters successfully!'}), 201
+
+    # # Zwróć odpowiedź do przeglądarki
+    # return "Python function executed successfully!", 200
 @app.route('/register_device', methods=['POST'])
 def register_device():
     read_username_from_db()
@@ -325,9 +370,11 @@ def device_data():
     if not user_devices:
         return render_template('device_data.html', data=[], message="No devices registered.")
 
-    device_ids = [device.device_id for device in user_devices]
+    device_ids = [device.device_id.upper() for device in user_devices]
+    print(device_ids)
     data = SensorData.query.filter(SensorData.device_id.in_(device_ids)).order_by(SensorData.timestamp.desc()).all()
-
+    print(type(data))
+    print(data)
     return render_template('device_data.html', data=data, message=None)
 
 @app.route('/save_sensor_data', methods=['POST'])
@@ -348,44 +395,78 @@ def save_sensor_data():
     db.session.commit()
     return jsonify({'message': 'Data saved successfully!'}), 201
 
-@app.route('/publish_to_device', methods=['POST'])
-def publish_to_device():
-    if 'user_id' not in session:
-        return jsonify({'error': 'Unauthorized access!'}), 403
+# @app.route('/publish_to_device', methods=['POST'])
+# def publish_to_device():
+#     if 'user_id' not in session:
+#         return jsonify({'error': 'Unauthorized access!'}), 403
+#
+#     user_id = session['user_id']
+#
+#     # Pobierz dane użytkownika z bazy danych
+#     user_variables = UserDefinedVariables.query.filter_by(user_id=user_id).first()
+#     if not user_variables:
+#         return jsonify({'error': 'No parameters set for this user!'}), 404
+#
+#     # Utwórz payload z danymi
+#     payload = {
+#         "lower_temp_limit": user_variables.lower_temp_limit,
+#         "higher_temp_limit": user_variables.higher_temp_limit,
+#         "send_times": [time.send_time.strftime('%H:%M') for time in user_variables.send_times]
+#     }
+#
+#     try:
+#         # Konfiguracja klienta MQTT
+#         client = mqtt.Client()
+#         client.username_pw_set(USERNAME, PASSWORD)
+#         client.connect(BROKER_URL, BROKER_PORT, 60)
+#
+#         # Publikacja danych
+#         topic = f"user{user_id}/device/config"
+#         client.publish(topic, json.dumps(payload))
+#         client.disconnect()
+#
+#         return jsonify({'message': 'Configuration published to device!'}), 200
+#     except Exception as e:
+#         return jsonify({'error': f'Failed to publish data: {str(e)}'}), 500
+def read_frequency_from_db():
+    username = data_from_beacon.get('username')
+    user_id = User.query.filter_by(username=username).first().id
+    if user_id:
+        result = UserDefinedVariables.query.filter_by(user_id=user_id).first()
+        frequency = result.frequency if result else None
+        return frequency
+    else:
+        print('Nie ma takiego użytkownika!')
 
-    user_id = session['user_id']
 
-    # Pobierz dane użytkownika z bazy danych
-    user_variables = UserDefinedVariables.query.filter_by(user_id=user_id).first()
-    if not user_variables:
-        return jsonify({'error': 'No parameters set for this user!'}), 404
-
-    # Utwórz payload z danymi
-    payload = {
-        "lower_temp_limit": user_variables.lower_temp_limit,
-        "higher_temp_limit": user_variables.higher_temp_limit,
-        "send_times": [time.send_time.strftime('%H:%M') for time in user_variables.send_times]
-    }
-
-    try:
-        # Konfiguracja klienta MQTT
-        client = mqtt.Client()
-        client.username_pw_set(USERNAME, PASSWORD)
-        client.connect(BROKER_URL, BROKER_PORT, 60)
-
-        # Publikacja danych
-        topic = f"user{user_id}/device/config"
-        client.publish(topic, json.dumps(payload))
-        client.disconnect()
-
-        return jsonify({'message': 'Configuration published to device!'}), 200
-    except Exception as e:
-        return jsonify({'error': f'Failed to publish data: {str(e)}'}), 500
-
+def read_changed_limits_from_db():
+    """lista będzie się składać z obu limitów, niezależnie od tego czy użytkownik zmienił oba"""
+    username = data_from_beacon.get('username')
+    user_id = User.query.filter_by(username=username).first().id
+    if user_id:
+        result=UserDefinedVariables.query.filter_by(user_id=user_id).first()
+        high_limit = result.higher_temp_limit if result else None
+        low_limit = result.lower_temp_limit if result else None
+        return high_limit,low_limit
+    else:
+        print('Nie ma takiego użytkownika!')
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        setup_mqtt()  # Konfiguracja MQTT
+        # a=read_send_times_from_db_and_transform_to_string()
+        # data = {
+        #     "send_times": a
+        # }
+        # publish_to_device(data)
+        # setup_mqtt()  # Konfiguracja MQTT
         # publish_to_device()
+        # while(True):
+        #     # # send_times_to_beacon()
+        #     # publish_to_device(read_frequency_from_db(),'sending_times')
+        #     # publish_to_device_2(read_changed_limits_from_db(),'temperature_limits')
+        #
+        #     sleep(5)
+        # read_changed_limits_from_db()
+
     app.run(debug=True)

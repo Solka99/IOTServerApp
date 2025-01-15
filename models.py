@@ -24,6 +24,7 @@ class UserDefinedVariables(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'),  primary_key=True, nullable=True)
     lower_temp_limit = db.Column(db.Integer, nullable=True)
     higher_temp_limit = db.Column(db.Integer, nullable=True)
+    frequency = db.Column(db.Integer, nullable=True)
 
     # Relacja do tabeli SendTimes
     send_times = db.relationship('SendTimes', backref='variables', lazy=True)
