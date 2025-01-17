@@ -193,9 +193,12 @@ def login():
         )
         db.session.add(new_device)
         db.session.commit()
+
+        publish_to_device(user.username,'username')
         # # flash(f'Device {mac_address} has been registered successfully!', 'success')\
         # session['message'] = f'Device {mac_address} has been registered successfully!'
         flash(f'Device {mac_address} has been registered successfully!', 'success')
+        print(f'Device {mac_address} has been registered successfully!')
         return redirect(url_for('dashboard'))
         # return jsonify({'redirect': url_for('dashboard')}), 200
 
@@ -289,6 +292,7 @@ def set_parameters():
 
 @app.route('/mqtt_send', methods=['POST'])
 def mqtt_send():
+    # save_data_to_db()
     publish_to_device(read_frequency_from_db(), 'sending_times')
     publish_to_device_2(read_changed_limits_from_db(), 'limits')
 
@@ -459,7 +463,7 @@ if __name__ == '__main__':
         #     "send_times": a
         # }
         # publish_to_device(data)
-        # setup_mqtt()  # Konfiguracja MQTT
+        setup_mqtt()  # Konfiguracja MQTT
         # publish_to_device()
         # while(True):
         #     # # send_times_to_beacon()
